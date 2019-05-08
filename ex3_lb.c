@@ -73,14 +73,14 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
     while (true){
         connection_fd = accept(*http_socket, NULL, NULL);  // check for failure?,  TODO: change null to get http info to send back info to it?
         while (true){
-            bytes_read = recv(connection_fd, buffer, RECEIVING_BUFFER_SIZE, 0);
+            bytes_read = recv(connection_fd, buffer, RECEIVING_BUFFER_SIZE, 0); // debug run_test.py when breakpoint is a bit after here
             if (bytes_read == -1){// remove ?
                 printf("bytes read returned -1\n"); // remove ?
                 break;
             }
             if ((end_sequence_of_http_request_pointer = strstr(buffer, END_OF_HTTP_REQUEST))!=NULL){ // means an end to an http request has come
                 end_of_http_request = end_sequence_of_http_request_pointer + LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST;
-                http_request_buffer = memcpy(http_request_buffer + total_bytes_wrote, buffer, end_of_http_request - buffer );
+                memcpy(http_request_buffer + total_bytes_wrote, buffer, end_of_http_request - buffer );
                 printf("%s", http_request_buffer);
                 //total_bytes_wrote  += end_of_http_request_pointer - buffer; // amount of bytes of the current http request
                 response_from_server = process_http_request_to_server(http_request_buffer, &server_number, server_sockets_list);
