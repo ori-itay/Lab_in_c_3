@@ -39,7 +39,7 @@ int main(){
 
     bind_random_port(&http_socket, &server_socket, &server_sockaddr, &http_server_sockaddr);
     listen(http_socket, 10); // check for failure? change from 10 !
-    listen(server_socket, 3);
+    listen(server_socket, 3); // check for failure? change from 10 !
 
 
 
@@ -104,10 +104,10 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
 }
 
 char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[3]){
-    send(server_sockets_list[*server_number], http_request_buffer, strlen(http_request_buffer), 0);
+    send(server_sockets_list[*server_number], http_request_buffer, strlen(http_request_buffer), 0); // TODO: inside a loop?
 
     char* response_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
-    int bytes_read = recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0); // TODO: this into loop?
+    int bytes_read = recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0); // TODO: this into loop? and untill reading two \r\n\r\n
     // TODO: check for if bytes_read==0 etc?
 
     *server_number = (*server_number + 1) % 3;
@@ -115,7 +115,7 @@ char* process_http_request_to_server(char* http_request_buffer, int *server_numb
 }
 
 void send_back_response_to_client(char* response_from_server, const int* http_socket){
-
+    send(*http_socket, response_from_server, strlen(response_from_server), 0); // TODO: in a loop?
 }
 
 void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* server_sockaddr, struct sockaddr_in* http_server_sockaddr){
@@ -135,6 +135,7 @@ void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* 
             write_port_to_file(random_port, HTTP_PORT);
             while (true){
                 random_port = get_random_port();
+                (*server_sockaddr).sin_port = htons(random_port);
                 if (bind(*server_socket, (struct sockaddr*)server_sockaddr, sizeof(*server_sockaddr))  < 0  ){
                     continue;
                 }
