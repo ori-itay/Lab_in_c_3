@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <sys/socket.h> // check that all are neccessary
 #include <netinet/in.h>
@@ -31,7 +32,7 @@ int main(){
     int server_sockets_list[3];
     srand(time(0));
 
-    http_socket   = socket(AF_INET, SOCK_STREAM, 0); // check for failure?
+    http_socket   = socket(AF_INET, SOCK_STREAM, 0); //  AF_INET, SOCK_STREAM, 0 check for failure?
     server_socket = socket(AF_INET, SOCK_STREAM, 0); // check for failure?
     setsockopt(http_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)); // check for failure?
     opt = -1; // ?
@@ -74,8 +75,18 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
         connection_fd = accept(*http_socket, NULL, NULL);  // check for failure?,  TODO: change null to get http info to send back info to it?
         while (true){
             bytes_read = recv(connection_fd, buffer, RECEIVING_BUFFER_SIZE, 0); // debug run_test.py when breakpoint is a bit after here
+            //send(*http_socket, "bla", 3, 0); // del
+            if (bytes_read < RECEIVING_BUFFER_SIZE){
+                memset(buffer + bytes_read, 0 ,RECEIVING_BUFFER_SIZE - bytes_read);
+            }
             if (bytes_read == -1){// remove ?
                 printf("bytes read returned -1\n"); // remove ?
+                break;
+            }
+            if (bytes_read == 0){ // TODO: check if got the end of http request, if not, continue, else, break ! even before or with no bytes_read==0
+                printf("bytes read returned 0\n");
+                //memset(buffer, 0, RECEIVING_BUFFER_SIZE);
+                close(connection_fd);
                 break;
             }
             if ((end_sequence_of_http_request_pointer = strstr(buffer, END_OF_HTTP_REQUEST))!=NULL){ // means an end to an http request has come
@@ -84,17 +95,13 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
                 printf("%s", http_request_buffer);
                 //total_bytes_wrote  += end_of_http_request_pointer - buffer; // amount of bytes of the current http request
                 response_from_server = process_http_request_to_server(http_request_buffer, &server_number, server_sockets_list);
-                send_back_response_to_client(response_from_server, http_socket);
+                send(connection_fd, response_from_server, strlen(response_from_server), 0);//send_back_response_to_client(response_from_server, http_socket);
                 memset(http_request_buffer, 0, RECEIVING_BUFFER_SIZE); free(response_from_server);
                 memcpy(http_request_buffer, end_of_http_request, strlen(end_of_http_request));
                 total_bytes_wrote = strlen(end_of_http_request);
                 continue;
             }
-            if (bytes_read == 0){ // TODO: check if got the end of http request, if not, continue, else, break ! even before or with no bytes_read==0
-                printf("bytes read returned 0\n");
-                printf("%s", http_request_buffer);
-                break;
-            }
+
             http_request_buffer=strncpy(http_request_buffer + total_bytes_wrote, buffer, bytes_read);
             total_bytes_wrote += bytes_read;
         }
