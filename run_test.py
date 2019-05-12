@@ -40,5 +40,5 @@ assert len(lines[4]) == content_length
 content = lines[4]
 assert lines[-2:] == ['', '']
 
-print content
+print (content)
 

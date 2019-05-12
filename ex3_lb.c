@@ -25,6 +25,7 @@ int get_random_port();
 char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[3]);
 void send_back_response_to_client(char* response_from_server, const int* http_socket);
 void connect_with_servers(int *server_socket, int server_sockets_list[3]);
+bool end_of_http_request_twice_in_string(char *string);
 
 int main(){
     int http_socket = -1, server_socket = -1, opt = 1;
@@ -131,18 +132,34 @@ char* process_http_request_to_server(char* http_request_buffer, int *server_numb
     }
 
     char* response_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
-    recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0); // TODO: this into loop? and untill reading two \r\n\r\n
-    /*int total_bytes_read = 0, bytes_read;
-    do {
-      bytes_read = recv(server_sockets_list[*server_number], response_buffer + total_bytes_read,
-          RECEIVING_BUFFER_SIZE - total_bytes_read, 0); // TODO:  untill reading two \r\n\r\n
-      total_bytes_read+= bytes_read;
-    }while(bytes_read > 0 && !strstr(response_buffer, END_OF_HTTP_REQUEST) );
-*/
+    recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0);
+    int total_bytes_read = 0, bytes_read;
+    while(!end_of_http_request_twice_in_string(response_buffer)){
+      total_bytes_read+= recv(server_sockets_list[*server_number], response_buffer + total_bytes_read,
+                        RECEIVING_BUFFER_SIZE - total_bytes_read, 0);
+    }
     // TODO: check for if bytes_read==0 etc?
 
     *server_number = (*server_number + 1) % 3;
     return response_buffer;
+}
+
+bool end_of_http_request_twice_in_string(char *string){
+  int offset_index = 0, string_length = strlen(string), occurrence_counter = 0;
+
+  while(offset_index < string_length){
+    if(strncmp(END_OF_HTTP_REQUEST, string+offset_index, LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST) == 0){
+      occurrence_counter++;
+      offset_index+=LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST;
+    }
+    else{
+      offset_index++;
+    }
+    if(occurrence_counter == 2) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void send_back_response_to_client(char* response_from_server, const int* connection_fd){
