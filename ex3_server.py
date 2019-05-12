@@ -24,17 +24,19 @@ def main():
     while True:
         ready_sockets,_,_ = select.select(socket_list, [], [])
         for ready_socket in ready_sockets:
-            data_received = ready_socket.recv(RECEIVING_SIZE) # TODO: assumes the whole read is a complete request - maybe its not?
+            data_received = receive_from_ready_socket(ready_socket, RECEIVING_SIZE)
+            #data_received = ready_socket.recv(RECEIVING_SIZE) # TODO: assumes the whole read is a complete request - maybe its not?
             response = process_data_received(data_received, servers_total_counter_list, socket_list.index(ready_socket))
             ready_socket.sendall(response)
-            #total_bytes_sent = 0
-            #while (total_bytes_sent < len(response)):
-            #    total_bytes_sent+= ready_socket.send(response[total_bytes_sent:])
 
 
+def receive_from_ready_socket(ready_socket, RECEIVING_SIZE):
+    END_OF_HTTP_REQUEST = "\r\n\r\n"
+    data_received = ""
+    while(END_OF_HTTP_REQUEST not in data_received):
+        data_received+= ready_socket.recv(RECEIVING_SIZE)
 
-
-
+    return data_received
 
 
 def process_data_received(data_received, servers_total_counter_list, current_socket_index):
