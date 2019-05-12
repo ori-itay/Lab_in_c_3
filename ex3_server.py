@@ -47,7 +47,7 @@ def process_data_received(data_received, servers_total_counter_list, current_soc
     str(len(str(servers_total_counter_list[0]))) + """\r\n\r\n""" + str(servers_total_counter_list[0]) + """\r\n\r\n"""
     
     else:
-        return """HTTP/1.1 404 Not Found\r\nContent-type: text/html\r\nContent-length: 113\r\n\r\n<html><head><title>Not Found</title></head><body<\r\nSorry, the object you requested was not found.\r\n</body></html>\r\n\r\n"""
+        return """HTTP/1.1 404 Not Found\r\nContent-type: text/html\r\nContent-length: 113\r\n\r\n<html><head><title>Not Found</title></head><body>\r\nSorry, the object you requested was not found.\r\n</body></html>\r\n\r\n"""
 
 
 
