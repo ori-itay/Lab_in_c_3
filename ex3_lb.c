@@ -67,15 +67,22 @@ void connect_with_servers(int *server_socket, int server_sockets_list[3]){
 }
 
 void handle_connections(const int *http_socket, int server_sockets_list[3]){
-    int connection_fd = -1, bytes_read, total_bytes_wrote = 0, server_number = 0;
+    int connection_fd = -1, old_connection_fd = -1, bytes_read, total_bytes_wrote = 0, server_number = 0;
     char* end_of_http_request;
     char buffer[RECEIVING_BUFFER_SIZE] = {0}; char *end_sequence_of_http_request_pointer, *response_from_server;
     char* http_request_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char)); // maybe not dynamically?
     while (true){
-        connection_fd = accept(*http_socket, NULL, NULL);  // check for failure?,  TODO: change null to get http info to send back info to it?
+        old_connection_fd = connection_fd;
+        printf("l76\n");
+        connection_fd = accept(*http_socket,NULL, NULL);  // check for failure?,  TODO: change null to get http info to send back info to it?
+      printf("l78\n");
+        if(old_connection_fd != -1) {
+            close(old_connection_fd);
+        }
         while (true){
+            printf("l83\n");
             bytes_read = recv(connection_fd, buffer, RECEIVING_BUFFER_SIZE, 0); // debug run_test.py when breakpoint is a bit after here
-            //send(*http_socket, "bla", 3, 0); // del
+            printf("l85\n");
             if (bytes_read < RECEIVING_BUFFER_SIZE){
                 memset(buffer + bytes_read, 0 ,RECEIVING_BUFFER_SIZE - bytes_read);
             }
@@ -86,24 +93,29 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
             if (bytes_read == 0){ // TODO: check if got the end of http request, if not, continue, else, break ! even before or with no bytes_read==0
                 printf("bytes read returned 0\n");
                 //memset(buffer, 0, RECEIVING_BUFFER_SIZE);
-                close(connection_fd);
+                //close(connection_fd);
                 break;
             }
-            if ((end_sequence_of_http_request_pointer = strstr(buffer, END_OF_HTTP_REQUEST))!=NULL){ // means an end to an http request has come
+            strncpy(http_request_buffer + total_bytes_wrote, buffer, bytes_read);
+            total_bytes_wrote += bytes_read;
+            //if ((end_sequence_of_http_request_pointer = strstr(buffer, END_OF_HTTP_REQUEST))!=NULL){ // means an end to an http request has come
+            if ((end_sequence_of_http_request_pointer = strstr(http_request_buffer, END_OF_HTTP_REQUEST))!=NULL){
                 end_of_http_request = end_sequence_of_http_request_pointer + LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST;
-                memcpy(http_request_buffer + total_bytes_wrote, buffer, end_of_http_request - buffer );
+                //memcpy(http_request_buffer + total_bytes_wrote, buffer, end_of_http_request - buffer );
                 printf("%s", http_request_buffer);
                 //total_bytes_wrote  += end_of_http_request_pointer - buffer; // amount of bytes of the current http request
                 response_from_server = process_http_request_to_server(http_request_buffer, &server_number, server_sockets_list);
-                send(connection_fd, response_from_server, strlen(response_from_server), 0);//send_back_response_to_client(response_from_server, http_socket);
+                send_back_response_to_client(response_from_server, &connection_fd);
+                //send(connection_fd, response_from_server, strlen(response_from_server), 0);//send_back_response_to_client(response_from_server, http_socket);
                 memset(http_request_buffer, 0, RECEIVING_BUFFER_SIZE); free(response_from_server);
                 memcpy(http_request_buffer, end_of_http_request, strlen(end_of_http_request));
                 total_bytes_wrote = strlen(end_of_http_request);
+                printf("L110\n");
                 continue;
+                //break;
             }
 
-            http_request_buffer=strncpy(http_request_buffer + total_bytes_wrote, buffer, bytes_read);
-            total_bytes_wrote += bytes_read;
+
         }
 
     }
@@ -111,18 +123,36 @@ void handle_connections(const int *http_socket, int server_sockets_list[3]){
 }
 
 char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[3]){
-    send(server_sockets_list[*server_number], http_request_buffer, strlen(http_request_buffer), 0); // TODO: inside a loop?
+
+    int total_bytes_sent = 0, total_bytes_to_send = strlen(http_request_buffer);
+    while(total_bytes_sent < total_bytes_to_send){
+        total_bytes_sent+=send(server_sockets_list[*server_number], http_request_buffer,strlen(http_request_buffer), 0);
+        http_request_buffer+=total_bytes_sent;
+    }
 
     char* response_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
-    int bytes_read = recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0); // TODO: this into loop? and untill reading two \r\n\r\n
+    recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0); // TODO: this into loop? and untill reading two \r\n\r\n
+    /*int total_bytes_read = 0, bytes_read;
+    do {
+      bytes_read = recv(server_sockets_list[*server_number], response_buffer + total_bytes_read,
+          RECEIVING_BUFFER_SIZE - total_bytes_read, 0); // TODO:  untill reading two \r\n\r\n
+      total_bytes_read+= bytes_read;
+    }while(bytes_read > 0 && !strstr(response_buffer, END_OF_HTTP_REQUEST) );
+*/
     // TODO: check for if bytes_read==0 etc?
 
     *server_number = (*server_number + 1) % 3;
     return response_buffer;
 }
 
-void send_back_response_to_client(char* response_from_server, const int* http_socket){
-    send(*http_socket, response_from_server, strlen(response_from_server), 0); // TODO: in a loop?
+void send_back_response_to_client(char* response_from_server, const int* connection_fd){
+
+    int total_bytes_sent = 0, total_bytes_to_send = strlen(response_from_server);
+    while(total_bytes_sent < total_bytes_to_send){
+      total_bytes_sent+=send(*connection_fd, response_from_server+total_bytes_sent,
+          total_bytes_to_send - total_bytes_sent, 0);
+    }
+    shutdown(*connection_fd,SHUT_RDWR);
 }
 
 void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* server_sockaddr, struct sockaddr_in* http_server_sockaddr){
@@ -140,18 +170,19 @@ void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* 
         }
         else {
             write_port_to_file(random_port, HTTP_PORT);
-            while (true){
-                random_port = get_random_port();
-                (*server_sockaddr).sin_port = htons(random_port);
-                if (bind(*server_socket, (struct sockaddr*)server_sockaddr, sizeof(*server_sockaddr))  < 0  ){
-                    continue;
-                }
-                else {
-                    write_port_to_file(random_port, SERVER_PORT);
-                    return;
-                }
-            }
+            break;
         }
+    }
+    while (true){
+      random_port = get_random_port();
+      (*server_sockaddr).sin_port = htons(random_port);
+      if (bind(*server_socket, (struct sockaddr*)server_sockaddr, sizeof(*server_sockaddr))  < 0  ){
+        continue;
+      }
+      else {
+        write_port_to_file(random_port, SERVER_PORT);
+        return;
+      }
     }
 }
 
