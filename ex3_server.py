@@ -2,16 +2,14 @@
 import sys
 from socket import *
 import select
-#import pdb
-
 
 def main():
     RECEIVING_SIZE = 1024
+    INIT_COUNT = 0
     port = int(sys.argv[1])
-    #pdb.set_trace()
-    servers_total_counter_list = [0,0,0]
+    servers_request_counter_list = [INIT_COUNT, INIT_COUNT, INIT_COUNT]
 
-    server_socket_server_one   = socket() # AF_INET, SOCK_STREAM
+    server_socket_server_one   = socket()
     server_socket_server_one.connect(('localhost', port))
 
     server_socket_server_two   = socket()
@@ -25,10 +23,9 @@ def main():
         ready_sockets,_,_ = select.select(socket_list, [], [])
         for ready_socket in ready_sockets:
             data_received = receive_from_ready_socket(ready_socket, RECEIVING_SIZE)
-            #data_received = ready_socket.recv(RECEIVING_SIZE) # TODO: assumes the whole read is a complete request - maybe its not?
-            response = process_data_received(data_received, servers_total_counter_list, socket_list.index(ready_socket))
+            response = process_data_received(data_received, servers_request_counter_list, \
+                                             socket_list.index(ready_socket))
             ready_socket.sendall(response)
-
 
 def receive_from_ready_socket(ready_socket, RECEIVING_SIZE):
     END_OF_HTTP_REQUEST = "\r\n\r\n"
@@ -38,23 +35,19 @@ def receive_from_ready_socket(ready_socket, RECEIVING_SIZE):
 
     return data_received
 
-
-def process_data_received(data_received, servers_total_counter_list, current_socket_index):
+def process_data_received(data_received, servers_request_counter_list, current_socket_index):
     get_line_of_address = data_received.split('\r\n')[0]
-    if "counter" in get_line_of_address:
-        servers_total_counter_list[current_socket_index] += 1
-        return """HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: """ + \
-    str(len(str(servers_total_counter_list[0]))) + """\r\n\r\n""" + str(servers_total_counter_list[0]) + """\r\n\r\n"""
-    
+    if "counter " in get_line_of_address:
+        servers_request_counter_list[current_socket_index] = servers_request_counter_list[current_socket_index] + 1
+        http_response = """HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: """ + \
+                        str(len(str(servers_request_counter_list[current_socket_index]))) + """\r\n\r\n""" + \
+                        str(servers_request_counter_list[current_socket_index]) + """\r\n\r\n"""
     else:
-        return """HTTP/1.1 404 Not Found\r\nContent-type: text/html\r\nContent-length: 113\r\n\r\n<html><head><title>Not Found</title></head><body>\r\nSorry, the object you requested was not found.\r\n</body></html>\r\n\r\n"""
+        http_response = """HTTP/1.1 404 Not Found\r\nContent-type: text/html\r\nContent-length: \ 113\r\n\r\n
+        <html><head><title>Not Found</title></head><body>\r\n
+        Sorry, the object you requested was not found.\r\n</body></html>\r\n\r\n"""
 
-
-
-
+    return http_response
 
 if __name__ == "__main__":
     main()
-    
-
-
