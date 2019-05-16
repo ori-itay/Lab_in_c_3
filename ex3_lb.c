@@ -15,23 +15,24 @@
 #define END_OF_HTTP_REQUEST "\r\n\r\n"
 #define LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST 4
 #define CONECCTION_FD_INIT -1
-#define SERVERS_QUEUE_SIZE 3
+#define NUM_OF_SERVERS 3
 #define CLIENT_QUEUE_SIZE 1
+#define INCREMENT_1 1
 
-void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in*
+void bind_random_port(const int* http_socket,const int* server_socket , struct sockaddr_in*
     server_sockaddr, struct sockaddr_in* http_server_sockaddr);
 int get_random_port();
 void write_port_to_file(int random_port, char *port_type);
-void connect_with_servers(int *server_socket, int server_sockets_list[3]);
-void handle_connections(const int http_socket, int server_sockets_list[3]);
+void connect_with_servers(int server_socket, int server_sockets_list[NUM_OF_SERVERS]);
+void handle_connections(const int http_socket, int server_sockets_list[NUM_OF_SERVERS]);
 bool end_of_http_request_twice_in_string(char *string);
-char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[3]);
+char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[NUM_OF_SERVERS]);
 void send_back_response_to_client(char* response_from_server, const int http_socket);
 
 int main(){
     int http_socket = -1, server_socket = -1, opt = 1;
     struct sockaddr_in server_sockaddr = {0}, http_server_sockaddr = {0};
-    int server_sockets_list[3];
+    int server_sockets_list[NUM_OF_SERVERS];
     srand(time(0));
 
     http_socket   = socket(AF_INET, SOCK_STREAM, 0); // check for failure?
@@ -41,15 +42,16 @@ int main(){
 
     bind_random_port(&http_socket, &server_socket, &server_sockaddr, &http_server_sockaddr);
     listen(http_socket, CLIENT_QUEUE_SIZE); // check for failure?
-    listen(server_socket, SERVERS_QUEUE_SIZE); // check for failure?
+    listen(server_socket, NUM_OF_SERVERS); // check for failure?
 
-    connect_with_servers(&server_socket, server_sockets_list);
+    connect_with_servers(server_socket, server_sockets_list);
     handle_connections(http_socket, server_sockets_list); // dont care about peer?
 
     return EXIT_SUCCESS;
 }
 
-void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* server_sockaddr, struct sockaddr_in* http_server_sockaddr){
+void bind_random_port(const int* http_socket,const  int* server_socket ,struct sockaddr_in* server_sockaddr,
+    struct sockaddr_in* http_server_sockaddr){
   int random_port;
   (*http_server_sockaddr).sin_family = AF_INET;
   (*http_server_sockaddr).sin_addr.s_addr =  INADDR_ANY;
@@ -81,7 +83,7 @@ void bind_random_port(int* http_socket, int* server_socket ,struct sockaddr_in* 
 }
 
 int get_random_port(){
-  int random_port = (rand() % (MAXIMUM_PORT_RANGE + 1 - STARTING_PORT_RANGE)) + STARTING_PORT_RANGE;
+  int random_port = (rand() % (MAXIMUM_PORT_RANGE + INCREMENT_1 - STARTING_PORT_RANGE)) + STARTING_PORT_RANGE;
   return random_port;
 }
 
@@ -97,13 +99,13 @@ void write_port_to_file(int random_port, char *port_type){
   fclose(fd);
 }
 
-void connect_with_servers(int *server_socket, int server_sockets_list[3]){
-    server_sockets_list[0] = accept(*server_socket, NULL, NULL);
-    server_sockets_list[1] = accept(*server_socket, NULL, NULL);
-    server_sockets_list[2] = accept(*server_socket, NULL, NULL);
+void connect_with_servers(int server_socket, int server_sockets_list[NUM_OF_SERVERS]){
+    server_sockets_list[0] = accept(server_socket, NULL, NULL);
+    server_sockets_list[1] = accept(server_socket, NULL, NULL);
+    server_sockets_list[2] = accept(server_socket, NULL, NULL);
 }
 
-void handle_connections(const int http_socket, int server_sockets_list[3]){
+void handle_connections(const int http_socket, int server_sockets_list[NUM_OF_SERVERS]){
     int connection_fd = CONECCTION_FD_INIT, old_connection_fd, bytes_read, total_bytes_wrote = 0, server_number = 0,
         http_request_buffer_size = RECEIVING_BUFFER_SIZE;
     char* end_of_http_request;
@@ -125,7 +127,8 @@ void handle_connections(const int http_socket, int server_sockets_list[3]){
                 break;
             }
             if(total_bytes_wrote+bytes_read > http_request_buffer_size){
-              http_request_buffer = (char*) realloc(http_request_buffer, total_bytes_wrote + RECEIVING_BUFFER_SIZE);
+              http_request_buffer = (char*) realloc(http_request_buffer, http_request_buffer_size + RECEIVING_BUFFER_SIZE);
+              memset(http_request_buffer + http_request_buffer_size, 0 ,RECEIVING_BUFFER_SIZE);
               http_request_buffer_size+= RECEIVING_BUFFER_SIZE;
             }
 
@@ -134,7 +137,6 @@ void handle_connections(const int http_socket, int server_sockets_list[3]){
             if ((end_sequence_of_http_request_pointer = strstr(http_request_buffer, END_OF_HTTP_REQUEST))!=NULL) { // means an end to an http request has come
               end_of_http_request = end_sequence_of_http_request_pointer +
                                     LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST;
-              printf("%s", http_request_buffer);
               response_from_server = process_http_request_to_server(
                   http_request_buffer, &server_number, server_sockets_list);
               send_back_response_to_client(response_from_server, connection_fd);
@@ -167,30 +169,34 @@ bool end_of_http_request_twice_in_string(char *string){
   return false;
 }
 
-char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[3]){
+char* process_http_request_to_server(char* http_request_buffer, int *server_number, int server_sockets_list[NUM_OF_SERVERS]){
 
-    int total_bytes_sent = 0, total_bytes_to_send = strlen(http_request_buffer), total_bytes_read = 0, bytes_read = 0;
-    char* response_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
-    char buffer[RECEIVING_BUFFER_SIZE];
+    int total_bytes_sent = 0, total_bytes_to_send = strlen(http_request_buffer), total_bytes_read = 0, bytes_read = 0,
+        total_response_buffer_size = RECEIVING_BUFFER_SIZE;
+    char* total_response_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
+    char buffer[RECEIVING_BUFFER_SIZE] = {0};
 
     while(total_bytes_sent < total_bytes_to_send){
         total_bytes_sent+=send(server_sockets_list[*server_number], http_request_buffer,strlen(http_request_buffer), 0);
         http_request_buffer+=total_bytes_sent;
     }
 
-    recv(server_sockets_list[*server_number], response_buffer, RECEIVING_BUFFER_SIZE, 0);
-    while(!end_of_http_request_twice_in_string(response_buffer)){
-
+    do{
       bytes_read = recv(server_sockets_list[*server_number], buffer, RECEIVING_BUFFER_SIZE, 0);
-      if(total_bytes_read + bytes_read > total_bytes_read + RECEIVING_BUFFER_SIZE)
-
-      bytes_read = recv(server_sockets_list[*server_number], response_buffer + total_bytes_read,
-                        RECEIVING_BUFFER_SIZE - total_bytes_read, 0);
+      if(total_bytes_read + bytes_read > total_response_buffer_size){
+        total_response_buffer = (char*) realloc(total_response_buffer, total_response_buffer_size + RECEIVING_BUFFER_SIZE);
+        memset(total_response_buffer + total_response_buffer_size, 0 ,RECEIVING_BUFFER_SIZE);
+        total_response_buffer_size+= RECEIVING_BUFFER_SIZE;
+      }
+      if (bytes_read < RECEIVING_BUFFER_SIZE){
+        memset(buffer + bytes_read, 0 ,RECEIVING_BUFFER_SIZE - bytes_read);
+      }
+      strncpy(total_response_buffer + total_bytes_read, buffer, bytes_read);
       total_bytes_read+= bytes_read;
-      memset(buffer + bytes_read, 0 ,RECEIVING_BUFFER_SIZE - bytes_read);
-    }
-    *server_number = (*server_number + 1) % 3;
-    return response_buffer;
+    }while(!end_of_http_request_twice_in_string(total_response_buffer));
+
+    *server_number = (*server_number + NUM_OF_SERVERS) % NUM_OF_SERVERS;
+    return total_response_buffer;
 }
 
 void send_back_response_to_client(char* response_from_server, const int connection_fd){
