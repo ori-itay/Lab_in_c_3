@@ -1,3 +1,4 @@
+    
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -17,9 +18,13 @@
 #define CONNECTION_FD_INIT -1
 #define NUMBER_OF_SERVERS 3
 #define CLIENT_QUEUE_SIZE 1
+#define TWO_OCCURENCES 2
 
-void bind_random_port(const int* http_socket, const int* server_socket, struct sockaddr_in* server_sockaddr,
+void sockets_setup(int* http_socket, int* server_socket, struct sockaddr_in* server_sockaddr,
+    struct sockaddr_in*http_server_sockaddr);
+void bind_random_ports(const int* http_socket, const int* server_socket, struct sockaddr_in* server_sockaddr,
                       struct sockaddr_in* http_server_sockaddr);
+void bind_available_port(int socket, struct sockaddr_in* sockaddr, char* file_name);
 int get_random_port();
 void write_port_to_file(int random_port, char* port_type);
 void connect_with_servers(int server_socket, int server_sockets_list[NUMBER_OF_SERVERS]);
@@ -31,28 +36,32 @@ void send_back_response_to_client(char* response_from_server, const int http_soc
 
 int main()
 {
-    int http_socket = CONNECTION_FD_INIT, server_socket = CONNECTION_FD_INIT, opt = 1;
+    int http_socket = CONNECTION_FD_INIT, server_socket = CONNECTION_FD_INIT;
     struct sockaddr_in server_sockaddr = {0}, http_server_sockaddr = {0};
     int server_sockets_list[NUMBER_OF_SERVERS];
     srand(time(0));
-    /////////////////put this inside one function ///////////
-    http_socket = socket(AF_INET, SOCK_STREAM, 0);
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(http_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-    bind_random_port(&http_socket, &server_socket, &server_sockaddr, &http_server_sockaddr);
-    listen(http_socket, CLIENT_QUEUE_SIZE);
-    listen(server_socket, NUMBER_OF_SERVERS);
-    //////////////////////////////////////////////////////////
-
+    sockets_setup(&http_socket, &server_socket, &server_sockaddr, &http_server_sockaddr);
     connect_with_servers(server_socket, server_sockets_list);
     handle_connections(http_socket, server_sockets_list);
 
     return EXIT_SUCCESS;
 }
 
-void bind_random_port(const int* http_socket, const int* server_socket, struct sockaddr_in* server_sockaddr,
+void sockets_setup(int* http_socket,int* server_socket, struct sockaddr_in* server_sockaddr,
+    struct sockaddr_in*http_server_sockaddr){
+  int opt = 1;
+
+  *http_socket = socket(AF_INET, SOCK_STREAM, 0);
+  *server_socket = socket(AF_INET, SOCK_STREAM, 0);
+  setsockopt(*http_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+  setsockopt(*server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+  bind_random_ports(http_socket, server_socket, server_sockaddr, http_server_sockaddr);
+  listen(*http_socket, CLIENT_QUEUE_SIZE);
+  listen(*server_socket, NUMBER_OF_SERVERS);
+}
+
+void bind_random_ports(const int* http_socket, const int* server_socket, struct sockaddr_in* server_sockaddr,
                       struct sockaddr_in* http_server_sockaddr)
 {
     int random_port;
@@ -61,26 +70,22 @@ void bind_random_port(const int* http_socket, const int* server_socket, struct s
     (*server_sockaddr).sin_family = AF_INET;
     (*server_sockaddr).sin_addr.s_addr = INADDR_ANY;
 
-    while (true) {
-        int random_port = get_random_port();
-        (*http_server_sockaddr).sin_port = htons(random_port);
-        if (bind(*http_socket, (struct sockaddr*)http_server_sockaddr, sizeof(*http_server_sockaddr)) < 0) {
-            continue;
-        } else {
-            write_port_to_file(random_port, HTTP_PORT);
-            break;
-        }
+    bind_available_port(*http_socket, http_server_sockaddr, HTTP_PORT);
+    bind_available_port(*server_socket, server_sockaddr, SERVER_PORT);
+}
+
+void bind_available_port(int socket, struct sockaddr_in* sockaddr, char* file_name){
+
+  while (true) {
+    int random_port = get_random_port();
+    (*sockaddr).sin_port = htons(random_port);
+    if (bind(socket, (struct sockaddr*)sockaddr, sizeof(*sockaddr)) < 0) {
+      continue;
+    } else {
+      write_port_to_file(random_port, file_name);
+      break;
     }
-    while (true) { // code reuse....turn it into func with argument
-        random_port = get_random_port();
-        (*server_sockaddr).sin_port = htons(random_port);
-        if (bind(*server_socket, (struct sockaddr*)server_sockaddr, sizeof(*server_sockaddr)) < 0) {
-            continue;
-        } else {
-            write_port_to_file(random_port, SERVER_PORT);
-            return;
-        }
-    }
+  }
 }
 
 int get_random_port()
@@ -166,7 +171,7 @@ bool end_of_http_request_twice_in_string(char* string)
         } else {
             offset_index++;
         }
-        if (occurrence_counter == 2) { // maybe change to define
+        if (occurrence_counter == TWO_OCCURENCES) {
             return true;
         }
     }
