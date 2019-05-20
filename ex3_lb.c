@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -16,7 +15,7 @@
 #define LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST 4
 #define CONNECTION_FD_INIT -1
 #define NUMBER_OF_SERVERS 3
-#define CLIENT_QUEUE_SIZE 1
+#define CLIENT_QUEUE_SIZE 10
 #define TWO_OCCURENCES 2
 
 void sockets_setup(int* http_socket, int* server_socket, struct sockaddr_in* server_sockaddr,
@@ -117,7 +116,7 @@ void connect_with_servers(int server_socket, int server_sockets_list[NUMBER_OF_S
 
 void handle_connections(const int http_socket, int server_sockets_list[NUMBER_OF_SERVERS])
 {
-    int new_connection_fd = CONNECTION_FD_INIT, old_connection_fd, server_number = 0,
+    int new_connection_fd = CONNECTION_FD_INIT, old_connection_fd, server_number = 0;
 
 
 
@@ -168,7 +167,7 @@ void get_http_request_and_send_response_to_client(const int new_connection_fd, i
             memset(buffer + bytes_read, 0, RECEIVING_BUFFER_SIZE - bytes_read);
         }
         if (bytes_read <= 0) {
-            printf("Error in while receiving from socket.\n");
+            printf("Error while receiving from socket.\n");
             break;
         }
         if (total_bytes_wrote + bytes_read > http_request_buffer_size) {
