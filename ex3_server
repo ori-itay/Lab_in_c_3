@@ -13,7 +13,7 @@ def main():
 
     while True:
         data_received = receive_from_socket(server_socket, RECEIVING_SIZE)
-        response = process_data_received(data_received, server_request_counter, server_socket)
+        response = process_data_received(data_received, server_request_counter)
         server_socket.sendall(response)
 
 def receive_from_socket(server_socket, RECEIVING_SIZE):
@@ -24,7 +24,7 @@ def receive_from_socket(server_socket, RECEIVING_SIZE):
 
     return data_received
 
-def process_data_received(data_received, server_request_counter, server_socket):
+def process_data_received(data_received, server_request_counter):
     get_line_of_address = data_received.split('\r\n')[0]
     if "counter " in get_line_of_address:
         server_request_counter[0] += 1

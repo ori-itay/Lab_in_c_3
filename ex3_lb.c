@@ -28,7 +28,7 @@ void write_port_to_file(int random_port, char* port_type);
 void connect_with_servers(int server_socket, int server_sockets_list[NUMBER_OF_SERVERS]);
 void handle_connections(const int http_socket, int server_sockets_list[NUMBER_OF_SERVERS]);
 bool end_of_http_request_twice_in_string(char* string);
-char* process_http_request_to_server(char* http_request_buffer, int* server_number,
+char* process_http_request_with_server(char* http_request_buffer, int* server_number,
                                      int server_sockets_list[NUMBER_OF_SERVERS]);
 void send_back_response_to_client(char* response_from_server, const int http_socket);
 void accept_new_connection_and_drop_last(const int http_socket, int* new_connection_fd, int* old_connection_fd);
@@ -64,7 +64,6 @@ void sockets_setup(int* http_socket,int* server_socket, struct sockaddr_in* serv
 void bind_random_ports(const int* http_socket, const int* server_socket, struct sockaddr_in* server_sockaddr,
                        struct sockaddr_in* http_server_sockaddr)
 {
-    int random_port;
     (*http_server_sockaddr).sin_family = AF_INET;
     (*http_server_sockaddr).sin_addr.s_addr = INADDR_ANY;
     (*server_sockaddr).sin_family = AF_INET;
@@ -118,47 +117,16 @@ void handle_connections(const int http_socket, int server_sockets_list[NUMBER_OF
 {
     int new_connection_fd = CONNECTION_FD_INIT, old_connection_fd, server_number = 0;
 
-
-
-
     while (true) {
         accept_new_connection_and_drop_last(http_socket, &new_connection_fd, &old_connection_fd);
         get_http_request_and_send_response_to_client(new_connection_fd, server_sockets_list, &server_number );
-//        old_connection_fd = connection_fd;
-//        connection_fd = accept(http_socket, NULL, NULL);
-//        if (old_connection_fd != CONNECTION_FD_INIT) {
-//            close(old_connection_fd);
-//        }
-//            bytes_read = recv(new_connection_fd, buffer, RECEIVING_BUFFER_SIZE, 0);
-//            if (bytes_read < RECEIVING_BUFFER_SIZE) {
-//                memset(buffer + bytes_read, 0, RECEIVING_BUFFER_SIZE - bytes_read);
-//            }
-//            if (bytes_read <= 0) {
-//                printf("Error in while receiving from socket.\n");
-//                break;
-//            }
-//            if (total_bytes_wrote + bytes_read > http_request_buffer_size) {
-//                http_request_buffer = (char*)realloc(http_request_buffer, http_request_buffer_size + RECEIVING_BUFFER_SIZE);
-//                memset(http_request_buffer + http_request_buffer_size, 0, RECEIVING_BUFFER_SIZE);
-//                http_request_buffer_size += RECEIVING_BUFFER_SIZE;
-//            }
-//
-//            strncpy(http_request_buffer + total_bytes_wrote, buffer, bytes_read);
-//            total_bytes_wrote += bytes_read;
-//            if (strstr(http_request_buffer, END_OF_HTTP_REQUEST) != NULL) {
-//                response_from_server = process_http_request_to_server(http_request_buffer, &server_number, server_sockets_list);
-//                send_back_response_to_client(response_from_server, new_connection_fd);
-//                memset(http_request_buffer, 0, http_request_buffer_size);
-//                total_bytes_wrote = 0;
-//                break;
-//            }
     }
 }
 
 void get_http_request_and_send_response_to_client(const int new_connection_fd, int server_sockets_list[NUMBER_OF_SERVERS], int* server_number ) {
     int bytes_read, total_bytes_wrote = 0, http_request_buffer_size = RECEIVING_BUFFER_SIZE;
     char buffer[RECEIVING_BUFFER_SIZE] = {0};
-    char* http_request_buffer          = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
+    char* http_request_buffer = (char*)calloc(RECEIVING_BUFFER_SIZE, sizeof(char));
     char* response_from_server;
 
     while (true){
@@ -167,8 +135,11 @@ void get_http_request_and_send_response_to_client(const int new_connection_fd, i
             memset(buffer + bytes_read, 0, RECEIVING_BUFFER_SIZE - bytes_read);
         }
         if (bytes_read <= 0) {
-            printf("Error while receiving from socket.\n");
-            break;
+            memset(buffer, 0, http_request_buffer_size);
+            memset(http_request_buffer, 0, http_request_buffer_size);
+            total_bytes_wrote = 0;
+            bytes_read = LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST;
+            strncpy(buffer, END_OF_HTTP_REQUEST, LENGTH_OF_END_SEQUENCE_OF_HTTP_REQUEST);
         }
         if (total_bytes_wrote + bytes_read > http_request_buffer_size) {
             http_request_buffer = (char*)realloc(http_request_buffer, http_request_buffer_size + RECEIVING_BUFFER_SIZE);
@@ -179,10 +150,9 @@ void get_http_request_and_send_response_to_client(const int new_connection_fd, i
         strncpy(http_request_buffer + total_bytes_wrote, buffer, bytes_read);
         total_bytes_wrote += bytes_read;
         if (strstr(http_request_buffer, END_OF_HTTP_REQUEST) != NULL) {
-            response_from_server = process_http_request_to_server(http_request_buffer, server_number, server_sockets_list);
+            response_from_server = process_http_request_with_server(http_request_buffer, server_number, server_sockets_list);
             send_back_response_to_client(response_from_server, new_connection_fd);
             memset(http_request_buffer, 0, http_request_buffer_size);
-            total_bytes_wrote = 0;
             break;
         }
     }
@@ -215,7 +185,7 @@ bool end_of_http_request_twice_in_string(char* string)
     return false;
 }
 
-char* process_http_request_to_server(char* http_request_buffer, int* server_number,
+char* process_http_request_with_server(char* http_request_buffer, int* server_number,
                                      int server_sockets_list[NUMBER_OF_SERVERS])
 {
 
